@@ -40,6 +40,7 @@ template = open('../default.template.nix').read()
 version_variables = re.findall(r'\$([a-z-]+)_version', template)
 sha_variables = re.findall(r'\$([a-z-]+)_sha', template)
 
+# grab the info for the current version
 repos = checkout_info["repos"]
 versions = checkout_info['branch-schemes'][f"release/{rough_version}"]["repos"]
 
@@ -48,14 +49,14 @@ fill_ins = {}
 for project in version_variables:
     fill_ins[f"{project}_version"] = versions[project]
 
+# download each dependency's tarball to figure out the sha Nix expects
 for project in sha_variables:
     project_repo = repos[project]["remote"]["id"]
     tarball_url = f"https://github.com/{project_repo}/archive/{versions[project]}.tar.gz"
     output = subprocess.check_output(['nix-prefetch-url', '--unpack', tarball_url])
     fill_ins[f"{project}_sha"] = output.decode('utf-8').rstrip()
 
-
-
+# replace the variables with values.
 result = template
 fill_ins['swift_version'] = full_version
 for key in fill_ins:
