@@ -36,8 +36,28 @@
 }:
 
 let
-  version = "$swift_version";
-  yamsVersion = "$yams_version";
+  # The Swift toolchain script builds projects with separate repos. By convention, some of them share
+  # the same version with the main Swift compiler project per release. We fetch these with
+  # `fetchSwiftRelease`. The rest have their own versions locked to each Swift release, as defined in the
+  # Swift compiler repo:
+  #   utils/update_checkout/update_checkout-config.json.
+  #
+  # ... among projects listed in that file, we provide our own:
+  # - CMake
+  # - ninja
+  # - icu
+  #
+  # ... we'd like to include the following in the future:
+  # - stress-tester
+  # - integration-tests
+
+  versions = {
+    swift = "$swift_version";
+    yams = "$yams_version";
+    argumentParser = "$swift-argument-parser_version";
+    format = "$swift-format_version";
+    crypto = "$swift-crypto_version";
+  };
 
   fetchAppleRepo = { repo, rev, sha256 }:
     fetchFromGitHub {
@@ -50,12 +70,13 @@ let
     fetchFromGitHub {
       owner = "apple";
       inherit repo sha256 fetchSubmodules;
-      rev = "swift-${version}-RELEASE";
-      name = "${repo}-${version}-src";
+      rev = "swift-${versions.swift}-RELEASE";
+      name = "${repo}-${versions.swift}-src";
     };
 
-  # Sources based on utils/update_checkout/update_checkout-config.json.
   sources = {
+    # Projects that share `versions.swift` for each release.
+
     swift = fetchSwiftRelease {
       repo = "swift";
       sha256 = "$swift_sha";
@@ -67,11 +88,6 @@ let
     llbuild = fetchSwiftRelease {
       repo = "swift-llbuild";
       sha256 = "$llbuild_sha";
-    };
-    argumentParser = fetchAppleRepo {
-      repo = "swift-argument-parser";
-      rev = "$swift-argument-parser_version";
-      sha256 = "$swift-argument-parser_sha";
     };
     driver = fetchSwiftRelease {
       repo = "swift-driver";
@@ -89,7 +105,6 @@ let
       repo = "swift-syntax";
       sha256 = "$swift-syntax_sha";
     };
-    # TODO: possibly re-add stress-tester.
     corelibsXctest = fetchSwiftRelease {
       repo = "swift-corelibs-xctest";
       sha256 = "$swift-corelibs-xctest_sha";
@@ -103,18 +118,6 @@ let
       sha256 = "$swift-corelibs-libdispatch_sha";
       fetchSubmodules = true;
     };
-    # TODO: possibly re-add integration-tests.
-    # Linux does not support Xcode playgrounds.
-    # We provide our own ninja.
-    # We provider our own icu.
-    yams = fetchFromGitHub {
-      owner = "jpsim";
-      repo = "Yams";
-      rev = yamsVersion;
-      sha256 = "$yams_sha";
-      name = "Yams-${yamsVersion}-src";
-    };
-    # We provide our own CMake.
     indexstoreDb = fetchSwiftRelease {
       repo = "indexstore-db";
       sha256 = "$indexstore-db_sha";
@@ -123,19 +126,34 @@ let
       repo = "sourcekit-lsp";
       sha256 = "$sourcekit-lsp_sha";
     };
+    llvmProject = fetchSwiftRelease {
+      repo = "llvm-project";
+      sha256 = "$llvm-project_sha";
+    };
+
+    # Projects that have their own versions during each release
+
+    argumentParser = fetchAppleRepo {
+      repo = "swift-argument-parser";
+      rev = "${versions.argumentParser}";
+      sha256 = "$swift-argument-parser_sha";
+    };
     format = fetchAppleRepo {
       repo = "swift-format";
-      rev = "$swift-format_version";
+      rev = "${versions.format}";
       sha256 = "$swift-format_sha";
     };
     crypto = fetchAppleRepo {
       repo = "swift-crypto";
-      rev = "$swift-crypto_version";
+      rev = "${versions.crypto}";
       sha256 = "$swift-crypto_sha";
     };
-    llvmProject = fetchSwiftRelease {
-      repo = "llvm-project";
-      sha256 = "$llvm-project_sha";
+    yams = fetchFromGitHub {
+      owner = "jpsim";
+      repo = "Yams";
+      rev = versions.yams;
+      sha256 = "$yams_sha";
+      name = "Yams-${versions.yams}-src";
     };
   };
 
@@ -164,7 +182,7 @@ let
 
 in
 stdenv.mkDerivation {
-  name = "swift-${version}";
+  name = "swift-${versions.swift}";
 
   nativeBuildInputs = [
     autoconf
@@ -211,11 +229,9 @@ stdenv.mkDerivation {
     cp -r ${sources.toolsSupportCore} swift-tools-support-core
     cp -r ${sources.swiftpm} swiftpm
     cp -r ${sources.syntax} swift-syntax
-    # TODO: possibly re-add stress-tester.
     cp -r ${sources.corelibsXctest} swift-corelibs-xctest
     cp -r ${sources.corelibsFoundation} swift-corelibs-foundation
     cp -r ${sources.corelibsLibdispatch} swift-corelibs-libdispatch
-    # TODO: possibly re-add integration-tests.
     cp -r ${sources.yams} yams
     cp -r ${sources.indexstoreDb} indexstore-db
     cp -r ${sources.sourcekitLsp} sourcekit-lsp
